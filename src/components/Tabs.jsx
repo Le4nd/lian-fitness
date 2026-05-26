@@ -113,22 +113,21 @@ export function BodyTab({ measureLog, newMeasure, setNewMeasure, logMeasurements
   )
 }
 
-export function WeekTab({ habits, weightLog, dailyLog, habitsLog, setSelectedDate }) {
+export function WeekTab({ weightLog, dailyLog, habitsLog, setSelectedDate }) {
   const today = todayStr()
   const weekDates = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(); d.setDate(d.getDate() - (6 - i)); return d.toISOString().split('T')[0]
   })
-  const doneCount = habits.filter(h => h.done).length
-  const habitPct = Math.round((doneCount / habits.length) * 100)
+  const todayHabits = habitsLog[today] ?? {}
+  const todayDoneCount = Object.values(todayHabits).filter(Boolean).length
   const weekHabitAvg = () => {
     const days = weekDates.map(d => {
-      if (d === today) return habitPct
       const snap = habitsLog[d]
       return snap ? Math.round((Object.values(snap).filter(Boolean).length / DAILY_HABITS.length) * 100) : null
     }).filter(x => x !== null)
     return days.length ? Math.round(days.reduce((a, b) => a + b, 0) / days.length) : 0
   }
-  const weekGymDays = () => weekDates.filter(d => d === today ? habits.find(h => h.id === 'h2')?.done : habitsLog[d]?.h2).length
+  const weekGymDays = () => weekDates.filter(d => habitsLog[d]?.h_gym).length
   const weekWeightChange = () => {
     const inRange = weightLog.filter(e => weekDates.includes(e.date))
     if (inRange.length < 2) return null
@@ -143,7 +142,7 @@ export function WeekTab({ habits, weightLog, dailyLog, habitsLog, setSelectedDat
           { label: 'habit avg', value: `${weekHabitAvg()}%`, bg: C.blueLight, border: C.blueMid, color: C.blueDeep },
           { label: 'gym days', value: `${weekGymDays()}/7`, bg: C.pinkLight, border: C.pinkMid, color: C.pinkDeep },
           { label: 'weight change', value: wc === null ? '—' : +wc < 0 ? `${wc} kg` : wc === '0.0' ? 'stable' : `+${wc} kg`, bg: wc !== null && +wc < 0 ? C.greenLight : C.pinkLight, border: wc !== null && +wc < 0 ? C.greenBorder : C.pinkMid, color: wc !== null && +wc < 0 ? C.green : C.pinkDeep },
-          { label: 'streak', value: `${habits.length > 0 ? Math.round(habits.filter(h=>h.done).length/habits.length*100) : 0}% today`, bg: C.blueLight, border: C.blueMid, color: C.blueDeep },
+          { label: 'today habits', value: `${todayDoneCount}/${DAILY_HABITS.length}`, bg: C.blueLight, border: C.blueMid, color: C.blueDeep },
         ].map(sc => (
           <div key={sc.label} style={s.statCard(sc.bg, sc.border, sc.color)}>
             <div style={s.statNum}>{sc.value}</div><div style={s.statLbl}>{sc.label}</div>
@@ -155,7 +154,7 @@ export function WeekTab({ habits, weightLog, dailyLog, habitsLog, setSelectedDat
         {weekDates.map((d, i) => {
           const isToday = d === today
           const snap = habitsLog[d]
-          const done = isToday ? doneCount : snap ? Object.values(snap).filter(Boolean).length : null
+          const done = snap ? Object.values(snap).filter(Boolean).length : null
           const steps = dailyLog[d]?.steps
           const cal = dailyLog[d]?.calories
           return (
