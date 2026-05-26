@@ -18,20 +18,61 @@ const TABS = [
   { id: 'goals', label: 'Goals', icon: '🦋' },
 ]
 
+function formatDateLabel(dateStr) {
+  const isToday = dateStr === todayStr()
+  const y = new Date(); y.setDate(y.getDate() - 1)
+  const isYesterday = dateStr === y.toISOString().split('T')[0]
+  if (isToday) return 'Today'
+  if (isYesterday) return 'Yesterday'
+  return new Date(dateStr + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
+}
+
+function DateNav({ selectedDate, setSelectedDate }) {
+  const isToday = selectedDate === todayStr()
+  const shiftDay = (n) => {
+    const d = new Date(selectedDate + 'T12:00:00')
+    d.setDate(d.getDate() + n)
+    const next = d.toISOString().split('T')[0]
+    if (next <= todayStr()) setSelectedDate(next)
+  }
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '8px 16px', background: C.white, borderBottom: `1px solid ${C.neutralBorder}`, flexWrap: 'wrap' }}>
+      <button onClick={() => shiftDay(-1)} style={{ ...s.btnGhost, padding: '5px 14px', fontSize: 18, lineHeight: 1 }}>‹</button>
+      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span style={{ fontSize: 14, fontWeight: 600, color: isToday ? C.blueDeep : C.pinkDeep, minWidth: 130, textAlign: 'center' }}>
+          {formatDateLabel(selectedDate)}
+        </span>
+        <span style={{ fontSize: 14 }}>📅</span>
+        <input type="date" max={todayStr()} value={selectedDate}
+          onChange={e => { if (e.target.value && e.target.value <= todayStr()) setSelectedDate(e.target.value) }}
+          style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%' }} />
+      </div>
+      <button onClick={() => shiftDay(1)} disabled={isToday}
+        style={{ ...s.btnGhost, padding: '5px 14px', fontSize: 18, lineHeight: 1, opacity: isToday ? 0.3 : 1 }}>›</button>
+      {!isToday && (
+        <button onClick={() => setSelectedDate(todayStr())} style={{ ...s.btn, padding: '4px 12px', fontSize: 11 }}>
+          Back to today
+        </button>
+      )}
+    </div>
+  )
+}
+
 export default function App() {
   const [tab, setTab] = useState('today')
-  const [gymDay, setGymDay] = useState(0)  // lifted here so it never resets
+  const [gymDay, setGymDay] = useState(0)
   const [syncStatus, setSyncStatus] = useState('loading')
   const [showMilestone, setShowMilestone] = useState(null)
+  const [selectedDate, setSelectedDate] = useState(todayStr())
 
   const [streak, setStreak] = useState(1)
   const [habits, setHabits] = useState(DEFAULT_HABITS.map(h => ({ ...h, done: false })))
   const [weightLog, setWeightLog] = useState([])
   const [dailyLog, setDailyLog] = useState({})
-  const [habitsRange, setHabitsRange] = useState({})
+  const [habitsLog, setHabitsLog] = useState({})
   const [measureLog, setMeasureLog] = useState([])
   const [gymHistory, setGymHistory] = useState({})
-  const [todayGymSets, setTodayGymSets] = useState({})
+  const [gymSets, setGymSets] = useState({})
   const [lastMilestone, setLastMilestone] = useState(null)
 
   const [newWeight, setNewWeight] = useState('')
@@ -41,54 +82,51 @@ export default function App() {
 
   const debounceRef = useRef({})
 
+  const todayData = dailyLog[selectedDate] ?? {}
+  const selectedHabits = DEFAULT_HABITS.map(h => ({ ...h, done: habitsLog[selectedDate]?.[h.id] ?? false }))
+  const selectedGymSets = gymSets[selectedDate] ?? {}
+  const isToday = selectedDate === todayStr()
+
   // ── INITIAL LOAD ──────────────────────────────────────────────────────────
   useEffect(() => {
     ;(async () => {
       try {
         setSyncStatus('loading')
-
-        const [streakVal, weights, todayDaily, todayHabits, measures, gs] = await Promise.all([
+        const [streakVal, weights, measures, lm] = await Promise.all([
           db.loadAndUpdateStreak(),
           db.getAllWeights(),
-          db.getDaily(todayStr()),
-          db.getHabitsForDate(todayStr()),
           db.getAllMeasurements(),
-          db.getTodayGymSets(),
+          db.getMeta('milestone'),
         ])
-
         setStreak(streakVal)
         setMeasureLog(measures)
-        setTodayGymSets(gs)
-
-        // Weight — seed if empty
+        setLastMilestone(lm?.weight ?? null)
         if (weights.length === 0) {
           await db.logWeight(97)
           weights.push({ date: todayStr(), weight: 97 })
         }
         setWeightLog(weights)
 
-        // Habits
+        const dates30 = Array.from({ length: 30 }, (_, i) => {
+          const d = new Date(); d.setDate(d.getDate() - i); return d.toISOString().split('T')[0]
+        })
+        const [dailyMap, habitsMap, gs] = await Promise.all([
+          db.getDailyRange(dates30),
+          db.getHabitsRange(dates30),
+          db.getGymSetsForDate(todayStr()),
+        ])
+        setDailyLog(dailyMap)
+        setHabitsLog(habitsMap)
+        setGymSets({ [todayStr()]: gs })
+
+        // Load habits for today into the habits state
+        const todayHabits = habitsMap[todayStr()] ?? {}
         if (Object.keys(todayHabits).length > 0) {
           setHabits(DEFAULT_HABITS.map(h => ({ ...h, done: todayHabits[h.id] ?? false })))
         }
 
-        // Week range — merge, don't overwrite today
-        const weekDates = Array.from({ length: 7 }, (_, i) => {
-          const d = new Date(); d.setDate(d.getDate() - (6 - i))
-          return d.toISOString().split('T')[0]
-        })
-        const [weekDaily, weekHabits] = await Promise.all([
-          db.getDailyRange(weekDates),
-          db.getHabitsRange(weekDates),
-        ])
-        // Merge today's fresh data into the week map
-        setDailyLog({ ...weekDaily, [todayStr()]: todayDaily })
-        setHabitsRange(weekHabits)
-
-        // Gym history — load all exercises for all non-rest days
         const histMap = {}
         for (const day of ROUTINE.filter(d => !d.rest)) {
-          // Flatten all exercises in this day to get correct global indices
           const flatExs = day.sections.flatMap(sec => sec.exs)
           for (let exIdx = 0; exIdx < flatExs.length; exIdx++) {
             const rows = await db.getGymHistory(day.id, exIdx, 5)
@@ -96,10 +134,6 @@ export default function App() {
           }
         }
         setGymHistory(histMap)
-
-        const lm = await db.getMeta('milestone')
-        setLastMilestone(lm?.weight ?? null)
-
         setSyncStatus('idle')
       } catch (err) {
         console.error('Load error:', err)
@@ -108,6 +142,17 @@ export default function App() {
     })()
   }, [])
 
+  // ── LOAD WHEN DATE CHANGES ────────────────────────────────────────────────
+  useEffect(() => {
+    if (gymSets[selectedDate] !== undefined) return
+    ;(async () => {
+      setSyncStatus('loading')
+      const gs = await db.getGymSetsForDate(selectedDate)
+      setGymSets(prev => ({ ...prev, [selectedDate]: gs }))
+      setSyncStatus('idle')
+    })()
+  }, [selectedDate])
+
   // ── HELPERS ───────────────────────────────────────────────────────────────
   const withSync = useCallback(async (fn) => {
     setSyncStatus('saving')
@@ -115,49 +160,45 @@ export default function App() {
     setSyncStatus('idle')
   }, [])
 
-  const patchDailyLog = (field, value) => {
-    setDailyLog(prev => ({
-      ...prev,
-      [todayStr()]: { ...(prev[todayStr()] ?? {}), [field]: value }
-    }))
-  }
+  const patchDaily = (date, field, value) =>
+    setDailyLog(prev => ({ ...prev, [date]: { ...(prev[date] ?? {}), [field]: value } }))
 
   // ── ACTIONS ───────────────────────────────────────────────────────────────
   const toggleHabit = async (id) => {
-    const next = habits.map(h => h.id === id ? { ...h, done: !h.done } : h)
-    setHabits(next)
-    const h = next.find(h => h.id === id)
-    await withSync(() => db.setHabit(id, h.done))
+    const current = habitsLog[selectedDate]?.[id] ?? false
+    const next = !current
+    setHabitsLog(prev => ({ ...prev, [selectedDate]: { ...(prev[selectedDate] ?? {}), [id]: next } }))
+    if (isToday) setHabits(prev => prev.map(h => h.id === id ? { ...h, done: next } : h))
+    await withSync(() => db.setHabitForDate(selectedDate, id, next))
   }
 
   const addWater = async () => {
-    const cur = dailyLog[todayStr()]?.water ?? 0
-    const next = Math.min(cur + 1, 20)
-    patchDailyLog('water', next)
-    await withSync(() => db.updateDaily('water', next))
+    const next = Math.min((todayData.water ?? 0) + 1, 20)
+    patchDaily(selectedDate, 'water', next)
+    await withSync(() => db.updateDailyForDate(selectedDate, 'water', next))
   }
-
   const removeWater = async () => {
-    const cur = dailyLog[todayStr()]?.water ?? 0
-    const next = Math.max(cur - 1, 0)
-    patchDailyLog('water', next)
-    await withSync(() => db.updateDaily('water', next))
+    const next = Math.max((todayData.water ?? 0) - 1, 0)
+    patchDaily(selectedDate, 'water', next)
+    await withSync(() => db.updateDailyForDate(selectedDate, 'water', next))
   }
 
   const logWeight = async () => {
     const w = parseFloat(newWeight)
     if (!w || w < 30 || w > 250) return
     await withSync(async () => {
-      await db.logWeight(w)
-      const next = [...weightLog.filter(e => e.date !== todayStr()), { date: todayStr(), weight: w }]
+      await db.logWeight(w, selectedDate)
+      const next = [...weightLog.filter(e => e.date !== selectedDate), { date: selectedDate, weight: w }]
         .sort((a, b) => a.date.localeCompare(b.date))
       setWeightLog(next)
       setNewWeight('')
-      const hit = [...MILESTONES].reverse().find(m => w <= m.weight)
-      if (hit && hit.weight !== lastMilestone) {
-        setShowMilestone(hit)
-        setLastMilestone(hit.weight)
-        await db.setMeta('milestone', { weight: hit.weight })
+      if (isToday) {
+        const hit = [...MILESTONES].reverse().find(m => w <= m.weight)
+        if (hit && hit.weight !== lastMilestone) {
+          setShowMilestone(hit)
+          setLastMilestone(hit.weight)
+          await db.setMeta('milestone', { weight: hit.weight })
+        }
       }
     })
   }
@@ -165,30 +206,26 @@ export default function App() {
   const logCalories = async () => {
     const c = parseInt(newCal)
     if (!c || c < 0 || c > 10000) return
-    patchDailyLog('calories', c)
+    patchDaily(selectedDate, 'calories', c)
     setNewCal('')
-    await withSync(() => db.updateDaily('calories', c))
+    await withSync(() => db.updateDailyForDate(selectedDate, 'calories', c))
   }
 
   const logSteps = async () => {
     const st = parseInt(newSteps)
     if (!st || st < 0) return
-    patchDailyLog('steps', st)
+    patchDaily(selectedDate, 'steps', st)
     setNewSteps('')
-    await withSync(() => db.updateDaily('steps', st))
+    await withSync(() => db.updateDailyForDate(selectedDate, 'steps', st))
   }
 
   const logMeasurements = async () => {
     const { waist, hips, thighs } = newMeasure
     if (!waist && !hips && !thighs) return
-    const entry = {
-      waist: waist ? +waist : null,
-      hips: hips ? +hips : null,
-      thighs: thighs ? +thighs : null,
-    }
+    const entry = { waist: waist ? +waist : null, hips: hips ? +hips : null, thighs: thighs ? +thighs : null }
     await withSync(async () => {
-      await db.logMeasurements(entry)
-      const next = [...measureLog.filter(m => m.date !== todayStr()), { date: todayStr(), ...entry }]
+      await db.logMeasurementsForDate(selectedDate, entry)
+      const next = [...measureLog.filter(m => m.date !== selectedDate), { date: selectedDate, ...entry }]
         .sort((a, b) => a.date.localeCompare(b.date))
       setMeasureLog(next)
       setNewMeasure({ waist: '', hips: '', thighs: '' })
@@ -197,25 +234,24 @@ export default function App() {
 
   const handleSetChange = (dayId, exIdx, setIdx, field, val) => {
     const key = `${dayId}:${exIdx}:${setIdx}`
-    const updated = { ...(todayGymSets[key] ?? {}), [field]: val }
-    setTodayGymSets(prev => ({ ...prev, [key]: updated }))
+    const updated = { ...(selectedGymSets[key] ?? {}), [field]: val }
+    setGymSets(prev => ({ ...prev, [selectedDate]: { ...(prev[selectedDate] ?? {}), [key]: updated } }))
     clearTimeout(debounceRef.current[key])
     debounceRef.current[key] = setTimeout(async () => {
       setSyncStatus('saving')
-      await db.upsertGymSetToday(dayId, exIdx, setIdx, updated.kg, updated.reps)
+      await db.upsertGymSet(selectedDate, dayId, exIdx, setIdx, updated.kg, updated.reps)
       setSyncStatus('idle')
     }, 800)
   }
 
   const handleSaveHistory = async (dayId, exIdx, numSets) => {
     const sets = Array.from({ length: numSets }, (_, i) => {
-      const sv = todayGymSets[`${dayId}:${exIdx}:${i}`] ?? {}
+      const sv = selectedGymSets[`${dayId}:${exIdx}:${i}`] ?? {}
       return { setIdx: i, kg: sv.kg, reps: sv.reps }
     })
     await withSync(async () => {
-      const saved = await db.saveGymSets(dayId, exIdx, sets)
+      const saved = await db.saveGymSets(dayId, exIdx, sets, selectedDate)
       if (saved > 0) {
-        // Reload history for this exercise
         const rows = await db.getGymHistory(dayId, exIdx, 5)
         setGymHistory(prev => ({ ...prev, [`${dayId}:${exIdx}`]: rows }))
       }
@@ -223,8 +259,6 @@ export default function App() {
   }
 
   // ── RENDER ────────────────────────────────────────────────────────────────
-  const todayData = dailyLog[todayStr()] ?? {}
-
   return (
     <div style={{ fontFamily: "'DM Sans',sans-serif", background: `linear-gradient(160deg,${C.blueLight} 0%,#fff 45%,${C.pinkLight} 100%)`, minHeight: '100vh', color: C.textMain }}>
       <style>{`
@@ -246,15 +280,9 @@ export default function App() {
         </div>
       )}
 
-      {/* HEADER */}
-      <div style={{ padding: '24px 20px 0', paddingTop: 'calc(24px + env(safe-area-inset-top))' }}>
+      <div style={{ padding: '20px 20px 0', paddingTop: 'calc(20px + env(safe-area-inset-top))' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <div>
-            <h1 style={{ fontSize: 28, fontWeight: 400, margin: '0 0 3px', letterSpacing: '-0.5px', fontFamily: "'DM Serif Display',serif" }}>Lian's Journey</h1>
-            <p style={{ fontSize: 13, color: C.textMuted, margin: 0 }}>
-              {new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}
-            </p>
-          </div>
+          <h1 style={{ fontSize: 26, fontWeight: 400, margin: '0 0 2px', letterSpacing: '-0.5px', fontFamily: "'DM Serif Display',serif" }}>Lian's Journey</h1>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
             <div style={{ background: `linear-gradient(135deg,${C.blue},${C.pink})`, borderRadius: 20, padding: '5px 14px' }}>
               <span style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>🔥 {streak}d</span>
@@ -262,71 +290,35 @@ export default function App() {
             <SyncDot status={syncStatus} />
           </div>
         </div>
-        <div style={{ display: 'flex', height: 3, borderRadius: 2, margin: '16px 0 0', overflow: 'hidden' }}>
+        <div style={{ display: 'flex', height: 3, borderRadius: 2, margin: '12px 0 0', overflow: 'hidden' }}>
           {[C.blue, C.pink, '#fff', C.pink, C.blue].map((c, i) => (
             <div key={i} style={{ flex: 1, background: c, border: c === '#fff' ? `1px solid ${C.neutralBorder}` : 'none' }} />
           ))}
         </div>
       </div>
 
-      {/* TABS */}
       <div style={{ display: 'flex', padding: '0 4px', borderBottom: `1px solid ${C.neutralBorder}`, overflowX: 'auto', marginTop: 4 }}>
         {TABS.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)} style={{
-            padding: '10px 9px', fontSize: 11, fontWeight: 600, border: 'none',
-            background: 'transparent',
+            padding: '10px 9px', fontSize: 11, fontWeight: 600, border: 'none', background: 'transparent',
             color: tab === t.id ? C.blueDeep : C.textMuted,
             borderBottom: tab === t.id ? `2px solid ${C.blue}` : '2px solid transparent',
             cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all .15s', flexShrink: 0,
-          }}>
-            {t.icon} {t.label}
-          </button>
+          }}>{t.icon} {t.label}</button>
         ))}
       </div>
 
-      {/* CONTENT */}
-      <div style={{ padding: '20px 16px', paddingBottom: 'calc(40px + env(safe-area-inset-bottom))' }}>
-        {tab === 'today' && (
-          <TodayTab
-            habits={habits} toggleHabit={toggleHabit}
-            weightLog={weightLog} todayData={todayData}
-            addWater={addWater} removeWater={removeWater}
-          />
-        )}
-        {tab === 'gym' && (
-          <GymTab
-            gymDay={gymDay} setGymDay={setGymDay}
-            todayGymSets={todayGymSets}
-            gymHistory={gymHistory}
-            onSetChange={handleSetChange}
-            onSaveHistory={handleSaveHistory}
-          />
-        )}
-        {tab === 'diet' && (
-          <DietTab
-            todayData={todayData} weightLog={weightLog}
-            newCal={newCal} setNewCal={setNewCal} logCalories={logCalories}
-            newSteps={newSteps} setNewSteps={setNewSteps} logSteps={logSteps}
-          />
-        )}
-        {tab === 'weight' && (
-          <WeightTab
-            weightLog={weightLog}
-            newWeight={newWeight} setNewWeight={setNewWeight} logWeight={logWeight}
-          />
-        )}
-        {tab === 'body' && (
-          <BodyTab
-            measureLog={measureLog}
-            newMeasure={newMeasure} setNewMeasure={setNewMeasure} logMeasurements={logMeasurements}
-          />
-        )}
-        {tab === 'week' && (
-          <WeekTab
-            habits={habits} weightLog={weightLog}
-            dailyLog={dailyLog} habitsRange={habitsRange}
-          />
-        )}
+      {['today', 'gym', 'diet', 'weight', 'body'].includes(tab) && (
+        <DateNav selectedDate={selectedDate} setSelectedDate={setSelectedDate} />
+      )}
+
+      <div style={{ padding: '16px 16px', paddingBottom: 'calc(40px + env(safe-area-inset-bottom))' }}>
+        {tab === 'today' && <TodayTab habits={selectedHabits} toggleHabit={toggleHabit} weightLog={weightLog} todayData={todayData} addWater={addWater} removeWater={removeWater} selectedDate={selectedDate} />}
+        {tab === 'gym' && <GymTab gymDay={gymDay} setGymDay={setGymDay} todayGymSets={selectedGymSets} gymHistory={gymHistory} onSetChange={handleSetChange} onSaveHistory={handleSaveHistory} selectedDate={selectedDate} />}
+        {tab === 'diet' && <DietTab todayData={todayData} weightLog={weightLog} newCal={newCal} setNewCal={setNewCal} logCalories={logCalories} newSteps={newSteps} setNewSteps={setNewSteps} logSteps={logSteps} selectedDate={selectedDate} />}
+        {tab === 'weight' && <WeightTab weightLog={weightLog} newWeight={newWeight} setNewWeight={setNewWeight} logWeight={logWeight} selectedDate={selectedDate} />}
+        {tab === 'body' && <BodyTab measureLog={measureLog} newMeasure={newMeasure} setNewMeasure={setNewMeasure} logMeasurements={logMeasurements} selectedDate={selectedDate} />}
+        {tab === 'week' && <WeekTab habits={habits} weightLog={weightLog} dailyLog={dailyLog} habitsLog={habitsLog} setSelectedDate={(d) => { setSelectedDate(d); setTab('today') }} />}
         {tab === 'goals' && <GoalsTab weightLog={weightLog} />}
       </div>
     </div>
