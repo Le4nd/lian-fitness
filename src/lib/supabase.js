@@ -3,8 +3,10 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Missing Supabase environment variables. Copy .env.example to .env and fill in your credentials.')
-}
+// Don't throw — let app load and show the error visibly
+export const supabase = supabaseUrl && supabaseAnonKey
+  ? createClient(supabaseUrl, supabaseAnonKey)
+  : null
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+export const supabaseConfigured = !!(supabaseUrl && supabaseAnonKey)
+export const supabaseUrl_debug = supabaseUrl ?? 'MISSING'

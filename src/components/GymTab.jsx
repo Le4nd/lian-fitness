@@ -1,10 +1,8 @@
-import { useState } from 'react'
 import { C, ROUTINE } from '../lib/constants'
 import { s } from '../lib/styles'
 import { ExerciseCard } from './ExerciseCard'
 
-export function GymTab({ todayGymSets, gymHistory, onSetChange, onSaveHistory }) {
-  const [gymDay, setGymDay] = useState(0)
+export function GymTab({ gymDay, setGymDay, todayGymSets, gymHistory, onSetChange, onSaveHistory }) {
   const day = ROUTINE[gymDay]
 
   const bc = day.badge === 'key'
@@ -15,9 +13,13 @@ export function GymTab({ todayGymSets, gymHistory, onSetChange, onSaveHistory })
     ? { bg: C.greenLight, c: C.green }
     : null
 
+  // Flatten all exercises with stable global index across sections
+  const flatExercises = day.rest ? [] : day.sections.flatMap(sec =>
+    sec.exs.map(ex => ({ ex, secTitle: sec.title }))
+  )
+
   return (
     <>
-      {/* Day selector */}
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 16 }}>
         {ROUTINE.map((d, i) => (
           <button
@@ -68,38 +70,46 @@ export function GymTab({ todayGymSets, gymHistory, onSetChange, onSaveHistory })
             <p style={{ fontSize: 12, color: C.textMuted, margin: '4px 0 0' }}>{day.desc}</p>
           </div>
 
-          {day.sections.map((sec, secIdx) => (
-            <div key={secIdx} style={{ marginBottom: 16 }}>
-              <span style={s.slbl}>{sec.title}</span>
-              {sec.exs.map((ex, exIdx) => {
-                // Get last session entries for this exercise
-                const hist = gymHistory[`${day.id}:${exIdx}`] ?? []
-                // Group by date, take most recent date's sets
-                const byDate = {}
-                hist.forEach(r => {
-                  if (!byDate[r.date]) byDate[r.date] = []
-                  byDate[r.date].push(r)
-                })
-                const dates = Object.keys(byDate).sort().reverse()
-                const lastSession = dates.length ? byDate[dates[0]] : []
+          {(() => {
+            const elements = []
+            let globalExIdx = 0
+            let lastSecTitle = null
 
-                return (
-                  <ExerciseCard
-                    key={exIdx}
-                    ex={ex}
-                    exIdx={exIdx}
-                    dayId={day.id}
-                    todayGymSets={todayGymSets}
-                    lastSession={lastSession}
-                    onSetChange={onSetChange}
-                    onSaveHistory={onSaveHistory}
-                  />
-                )
-              })}
-            </div>
-          ))}
+            flatExercises.forEach(({ ex, secTitle }) => {
+              const exIdx = globalExIdx++
 
-          <div style={{ fontSize: 12, color: C.textMuted, background: C.neutral, borderRadius: 9, padding: '9px 13px' }}>
+              if (secTitle !== lastSecTitle) {
+                elements.push(<span key={`sec-${secTitle}-${exIdx}`} style={s.slbl}>{secTitle}</span>)
+                lastSecTitle = secTitle
+              }
+
+              const hist = gymHistory[`${day.id}:${exIdx}`] ?? []
+              const byDate = {}
+              hist.forEach(r => {
+                if (!byDate[r.date]) byDate[r.date] = []
+                byDate[r.date].push(r)
+              })
+              const dates = Object.keys(byDate).sort().reverse()
+              const lastSession = dates.length ? byDate[dates[0]] : []
+
+              elements.push(
+                <ExerciseCard
+                  key={`${day.id}-${exIdx}`}
+                  ex={ex}
+                  exIdx={exIdx}
+                  dayId={day.id}
+                  todayGymSets={todayGymSets}
+                  lastSession={lastSession}
+                  onSetChange={onSetChange}
+                  onSaveHistory={onSaveHistory}
+                />
+              )
+            })
+
+            return elements
+          })()}
+
+          <div style={{ fontSize: 12, color: C.textMuted, background: C.neutral, borderRadius: 9, padding: '9px 13px', marginTop: 8 }}>
             Stop 2 reps before failure · 60–90s rest between sets
           </div>
         </>

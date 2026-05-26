@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { C, DEFAULT_HABITS, MILESTONES, todayStr } from './lib/constants'
+import { C, DEFAULT_HABITS, MILESTONES, todayStr, ROUTINE } from './lib/constants'
 import { s } from './lib/styles'
 import * as db from './lib/db'
 import { SyncDot } from './components/SyncDot'
@@ -20,21 +20,20 @@ const TABS = [
 
 export default function App() {
   const [tab, setTab] = useState('today')
+  const [gymDay, setGymDay] = useState(0)  // lifted here so it never resets
   const [syncStatus, setSyncStatus] = useState('loading')
   const [showMilestone, setShowMilestone] = useState(null)
 
-  // ── Core data ──
   const [streak, setStreak] = useState(1)
   const [habits, setHabits] = useState(DEFAULT_HABITS.map(h => ({ ...h, done: false })))
   const [weightLog, setWeightLog] = useState([])
-  const [dailyLog, setDailyLog] = useState({})     // { date: {calories, steps, water} }
-  const [habitsRange, setHabitsRange] = useState({}) // { date: {h1: bool, ...} }
+  const [dailyLog, setDailyLog] = useState({})
+  const [habitsRange, setHabitsRange] = useState({})
   const [measureLog, setMeasureLog] = useState([])
-  const [gymHistory, setGymHistory] = useState({})  // { "dayId:exIdx": [{date,set_idx,kg,reps}] }
+  const [gymHistory, setGymHistory] = useState({})
   const [todayGymSets, setTodayGymSets] = useState({})
   const [lastMilestone, setLastMilestone] = useState(null)
 
-  // ── Form state ──
   const [newWeight, setNewWeight] = useState('')
   const [newCal, setNewCal] = useState('')
   const [newSteps, setNewSteps] = useState('')
@@ -42,66 +41,62 @@ export default function App() {
 
   const debounceRef = useRef({})
 
-  // ── INITIAL LOAD ────────────────────────────────────────────────────────
+  // ── INITIAL LOAD ──────────────────────────────────────────────────────────
   useEffect(() => {
     ;(async () => {
       try {
         setSyncStatus('loading')
 
-        // Streak
-        const streakVal = await db.loadAndUpdateStreak()
-        setStreak(streakVal)
+        const [streakVal, weights, todayDaily, todayHabits, measures, gs] = await Promise.all([
+          db.loadAndUpdateStreak(),
+          db.getAllWeights(),
+          db.getDaily(todayStr()),
+          db.getHabitsForDate(todayStr()),
+          db.getAllMeasurements(),
+          db.getTodayGymSets(),
+        ])
 
-        // Weight
-        const weights = await db.getAllWeights()
+        setStreak(streakVal)
+        setMeasureLog(measures)
+        setTodayGymSets(gs)
+
+        // Weight — seed if empty
         if (weights.length === 0) {
-          await db.logWeight(97) // seed starting weight
+          await db.logWeight(97)
           weights.push({ date: todayStr(), weight: 97 })
         }
         setWeightLog(weights)
 
-        // Today's daily data
-        const todayDaily = await db.getDaily(todayStr())
-        setDailyLog({ [todayStr()]: todayDaily })
-
-        // Today's habits
-        const todayHabits = await db.getHabitsForDate(todayStr())
+        // Habits
         if (Object.keys(todayHabits).length > 0) {
           setHabits(DEFAULT_HABITS.map(h => ({ ...h, done: todayHabits[h.id] ?? false })))
         }
 
-        // Week range for week tab
+        // Week range — merge, don't overwrite today
         const weekDates = Array.from({ length: 7 }, (_, i) => {
-          const d = new Date(); d.setDate(d.getDate() - (6 - i)); return d.toISOString().split('T')[0]
+          const d = new Date(); d.setDate(d.getDate() - (6 - i))
+          return d.toISOString().split('T')[0]
         })
         const [weekDaily, weekHabits] = await Promise.all([
           db.getDailyRange(weekDates),
           db.getHabitsRange(weekDates),
         ])
-        setDailyLog(weekDaily)
+        // Merge today's fresh data into the week map
+        setDailyLog({ ...weekDaily, [todayStr()]: todayDaily })
         setHabitsRange(weekHabits)
 
-        // Measurements
-        const measures = await db.getAllMeasurements()
-        setMeasureLog(measures)
-
-        // Gym history (load all — queries are per-exercise on demand would be better
-        // but for simplicity load all exercises upfront)
+        // Gym history — load all exercises for all non-rest days
         const histMap = {}
-        for (const day of ['d1','d2','d4','d5','d6']) {
-          const maxEx = 6
-          for (let exIdx = 0; exIdx < maxEx; exIdx++) {
-            const rows = await db.getGymHistory(day, exIdx, 3)
-            if (rows.length) histMap[`${day}:${exIdx}`] = rows
+        for (const day of ROUTINE.filter(d => !d.rest)) {
+          // Flatten all exercises in this day to get correct global indices
+          const flatExs = day.sections.flatMap(sec => sec.exs)
+          for (let exIdx = 0; exIdx < flatExs.length; exIdx++) {
+            const rows = await db.getGymHistory(day.id, exIdx, 5)
+            if (rows.length) histMap[`${day.id}:${exIdx}`] = rows
           }
         }
         setGymHistory(histMap)
 
-        // Today's gym sets
-        const gs = await db.getTodayGymSets()
-        setTodayGymSets(gs)
-
-        // Last milestone
         const lm = await db.getMeta('milestone')
         setLastMilestone(lm?.weight ?? null)
 
@@ -113,13 +108,21 @@ export default function App() {
     })()
   }, [])
 
-  // ── ACTIONS ─────────────────────────────────────────────────────────────
+  // ── HELPERS ───────────────────────────────────────────────────────────────
   const withSync = useCallback(async (fn) => {
     setSyncStatus('saving')
     try { await fn() } catch (e) { console.error(e); setSyncStatus('error'); return }
     setSyncStatus('idle')
   }, [])
 
+  const patchDailyLog = (field, value) => {
+    setDailyLog(prev => ({
+      ...prev,
+      [todayStr()]: { ...(prev[todayStr()] ?? {}), [field]: value }
+    }))
+  }
+
+  // ── ACTIONS ───────────────────────────────────────────────────────────────
   const toggleHabit = async (id) => {
     const next = habits.map(h => h.id === id ? { ...h, done: !h.done } : h)
     setHabits(next)
@@ -130,14 +133,14 @@ export default function App() {
   const addWater = async () => {
     const cur = dailyLog[todayStr()]?.water ?? 0
     const next = Math.min(cur + 1, 20)
-    setDailyLog(prev => ({ ...prev, [todayStr()]: { ...(prev[todayStr()] ?? {}), water: next } }))
+    patchDailyLog('water', next)
     await withSync(() => db.updateDaily('water', next))
   }
 
   const removeWater = async () => {
     const cur = dailyLog[todayStr()]?.water ?? 0
     const next = Math.max(cur - 1, 0)
-    setDailyLog(prev => ({ ...prev, [todayStr()]: { ...(prev[todayStr()] ?? {}), water: next } }))
+    patchDailyLog('water', next)
     await withSync(() => db.updateDaily('water', next))
   }
 
@@ -150,7 +153,6 @@ export default function App() {
         .sort((a, b) => a.date.localeCompare(b.date))
       setWeightLog(next)
       setNewWeight('')
-      // Check milestones
       const hit = [...MILESTONES].reverse().find(m => w <= m.weight)
       if (hit && hit.weight !== lastMilestone) {
         setShowMilestone(hit)
@@ -163,7 +165,7 @@ export default function App() {
   const logCalories = async () => {
     const c = parseInt(newCal)
     if (!c || c < 0 || c > 10000) return
-    setDailyLog(prev => ({ ...prev, [todayStr()]: { ...(prev[todayStr()] ?? {}), calories: c } }))
+    patchDailyLog('calories', c)
     setNewCal('')
     await withSync(() => db.updateDaily('calories', c))
   }
@@ -171,7 +173,7 @@ export default function App() {
   const logSteps = async () => {
     const st = parseInt(newSteps)
     if (!st || st < 0) return
-    setDailyLog(prev => ({ ...prev, [todayStr()]: { ...(prev[todayStr()] ?? {}), steps: st } }))
+    patchDailyLog('steps', st)
     setNewSteps('')
     await withSync(() => db.updateDaily('steps', st))
   }
@@ -179,7 +181,11 @@ export default function App() {
   const logMeasurements = async () => {
     const { waist, hips, thighs } = newMeasure
     if (!waist && !hips && !thighs) return
-    const entry = { waist: waist ? +waist : null, hips: hips ? +hips : null, thighs: thighs ? +thighs : null }
+    const entry = {
+      waist: waist ? +waist : null,
+      hips: hips ? +hips : null,
+      thighs: thighs ? +thighs : null,
+    }
     await withSync(async () => {
       await db.logMeasurements(entry)
       const next = [...measureLog.filter(m => m.date !== todayStr()), { date: todayStr(), ...entry }]
@@ -193,7 +199,6 @@ export default function App() {
     const key = `${dayId}:${exIdx}:${setIdx}`
     const updated = { ...(todayGymSets[key] ?? {}), [field]: val }
     setTodayGymSets(prev => ({ ...prev, [key]: updated }))
-    // Debounce DB write per key
     clearTimeout(debounceRef.current[key])
     debounceRef.current[key] = setTimeout(async () => {
       setSyncStatus('saving')
@@ -208,14 +213,16 @@ export default function App() {
       return { setIdx: i, kg: sv.kg, reps: sv.reps }
     })
     await withSync(async () => {
-      await db.saveGymSets(dayId, exIdx, sets)
-      // Refresh this exercise's history
-      const rows = await db.getGymHistory(dayId, exIdx, 3)
-      setGymHistory(prev => ({ ...prev, [`${dayId}:${exIdx}`]: rows }))
+      const saved = await db.saveGymSets(dayId, exIdx, sets)
+      if (saved > 0) {
+        // Reload history for this exercise
+        const rows = await db.getGymHistory(dayId, exIdx, 5)
+        setGymHistory(prev => ({ ...prev, [`${dayId}:${exIdx}`]: rows }))
+      }
     })
   }
 
-  // ── RENDER ───────────────────────────────────────────────────────────────
+  // ── RENDER ────────────────────────────────────────────────────────────────
   const todayData = dailyLog[todayStr()] ?? {}
 
   return (
@@ -228,7 +235,6 @@ export default function App() {
         body { margin: 0; padding: 0; }
       `}</style>
 
-      {/* ── MILESTONE MODAL ── */}
       {showMilestone && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, backdropFilter: 'blur(4px)' }} onClick={() => setShowMilestone(null)}>
           <div style={{ background: '#fff', borderRadius: 28, padding: '40px 28px', textAlign: 'center', maxWidth: 320, width: '100%', boxShadow: '0 20px 60px rgba(0,0,0,0.15)' }} onClick={e => e.stopPropagation()}>
@@ -240,7 +246,7 @@ export default function App() {
         </div>
       )}
 
-      {/* ── HEADER ── */}
+      {/* HEADER */}
       <div style={{ padding: '24px 20px 0', paddingTop: 'calc(24px + env(safe-area-inset-top))' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div>
@@ -263,8 +269,8 @@ export default function App() {
         </div>
       </div>
 
-      {/* ── TABS ── */}
-      <div style={{ display: 'flex', padding: '0 4px', borderBottom: `1px solid ${C.neutralBorder}`, overflowX: 'auto', gap: 0, marginTop: 4 }}>
+      {/* TABS */}
+      <div style={{ display: 'flex', padding: '0 4px', borderBottom: `1px solid ${C.neutralBorder}`, overflowX: 'auto', marginTop: 4 }}>
         {TABS.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)} style={{
             padding: '10px 9px', fontSize: 11, fontWeight: 600, border: 'none',
@@ -278,20 +284,18 @@ export default function App() {
         ))}
       </div>
 
-      {/* ── CONTENT ── */}
+      {/* CONTENT */}
       <div style={{ padding: '20px 16px', paddingBottom: 'calc(40px + env(safe-area-inset-bottom))' }}>
         {tab === 'today' && (
           <TodayTab
-            habits={habits}
-            toggleHabit={toggleHabit}
-            weightLog={weightLog}
-            todayData={todayData}
-            addWater={addWater}
-            removeWater={removeWater}
+            habits={habits} toggleHabit={toggleHabit}
+            weightLog={weightLog} todayData={todayData}
+            addWater={addWater} removeWater={removeWater}
           />
         )}
         {tab === 'gym' && (
           <GymTab
+            gymDay={gymDay} setGymDay={setGymDay}
             todayGymSets={todayGymSets}
             gymHistory={gymHistory}
             onSetChange={handleSetChange}
@@ -300,8 +304,7 @@ export default function App() {
         )}
         {tab === 'diet' && (
           <DietTab
-            todayData={todayData}
-            weightLog={weightLog}
+            todayData={todayData} weightLog={weightLog}
             newCal={newCal} setNewCal={setNewCal} logCalories={logCalories}
             newSteps={newSteps} setNewSteps={setNewSteps} logSteps={logSteps}
           />
@@ -320,15 +323,11 @@ export default function App() {
         )}
         {tab === 'week' && (
           <WeekTab
-            habits={habits}
-            weightLog={weightLog}
-            dailyLog={dailyLog}
-            habitsRange={habitsRange}
+            habits={habits} weightLog={weightLog}
+            dailyLog={dailyLog} habitsRange={habitsRange}
           />
         )}
-        {tab === 'goals' && (
-          <GoalsTab weightLog={weightLog} />
-        )}
+        {tab === 'goals' && <GoalsTab weightLog={weightLog} />}
       </div>
     </div>
   )

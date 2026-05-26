@@ -3,53 +3,63 @@ import { supabase } from './supabase'
 const today = () => new Date().toISOString().split('T')[0]
 const yesterday = () => { const d = new Date(); d.setDate(d.getDate() - 1); return d.toISOString().split('T')[0] }
 
-// ── META ────────────────────────────────────────────────────────────────────
+// ── META ─────────────────────────────────────────────────────────────────────
 export async function getMeta(key) {
-  const { data } = await supabase.from('app_meta').select('value').eq('key', key).single()
+  const { data } = await supabase.from('app_meta').select('value').eq('key', key).maybeSingle()
   return data?.value ?? null
 }
 export async function setMeta(key, value) {
-  await supabase.from('app_meta').upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: 'key' })
+  const { error } = await supabase.from('app_meta').upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: 'key' })
+  if (error) console.error('setMeta error:', error)
 }
 
-// ── WEIGHT ──────────────────────────────────────────────────────────────────
+// ── WEIGHT ───────────────────────────────────────────────────────────────────
 export async function getAllWeights() {
-  const { data } = await supabase.from('weight_log').select('date, weight').order('date', { ascending: true })
+  const { data, error } = await supabase.from('weight_log').select('date, weight').order('date', { ascending: true })
+  if (error) console.error('getAllWeights error:', error)
   return data ?? []
 }
 export async function logWeight(weight) {
-  await supabase.from('weight_log').upsert({ date: today(), weight }, { onConflict: 'date' })
+  const { error } = await supabase.from('weight_log').upsert({ date: today(), weight }, { onConflict: 'date' })
+  if (error) console.error('logWeight error:', error)
 }
 
-// ── DAILY (calories, steps, water) ──────────────────────────────────────────
+// ── DAILY ────────────────────────────────────────────────────────────────────
 export async function getDaily(date) {
-  const { data } = await supabase.from('daily_log').select('*').eq('date', date).single()
+  const { data, error } = await supabase.from('daily_log').select('*').eq('date', date).maybeSingle()
+  if (error) console.error('getDaily error:', error)
   return data ?? {}
 }
 export async function getDailyRange(dates) {
-  const { data } = await supabase.from('daily_log').select('*').in('date', dates)
+  const { data, error } = await supabase.from('daily_log').select('*').in('date', dates)
+  if (error) console.error('getDailyRange error:', error)
   const map = {}
   ;(data ?? []).forEach(r => { map[r.date] = r })
   return map
 }
 export async function updateDaily(field, value) {
-  const { data: existing } = await supabase.from('daily_log').select('id').eq('date', today()).single()
+  // Try update first, insert if no row exists
+  const { data: existing } = await supabase.from('daily_log').select('id').eq('date', today()).maybeSingle()
   if (existing) {
-    await supabase.from('daily_log').update({ [field]: value, updated_at: new Date().toISOString() }).eq('date', today())
+    const { error } = await supabase.from('daily_log').update({ [field]: value, updated_at: new Date().toISOString() }).eq('date', today())
+    if (error) console.error('updateDaily update error:', error)
   } else {
-    await supabase.from('daily_log').insert({ date: today(), [field]: value })
+    const { error } = await supabase.from('daily_log').insert({ date: today(), [field]: value })
+    if (error) console.error('updateDaily insert error:', error)
   }
 }
 
-// ── HABITS ──────────────────────────────────────────────────────────────────
+// ── HABITS ───────────────────────────────────────────────────────────────────
 export async function getHabitsForDate(date) {
-  const { data } = await supabase.from('habit_log').select('habit_id, done').eq('date', date)
+  const { data, error } = await supabase.from('habit_log').select('habit_id, done').eq('date', date)
+  if (error) console.error('getHabitsForDate error:', error)
   const map = {}
   ;(data ?? []).forEach(r => { map[r.habit_id] = r.done })
   return map
 }
 export async function getHabitsRange(dates) {
-  const { data } = await supabase.from('habit_log').select('date, habit_id, done').in('date', dates)
+  const { data, error } = await supabase.from('habit_log').select('date, habit_id, done').in('date', dates)
+  if (error) console.error('getHabitsRange error:', error)
   const map = {}
   ;(data ?? []).forEach(r => {
     if (!map[r.date]) map[r.date] = {}
@@ -58,66 +68,99 @@ export async function getHabitsRange(dates) {
   return map
 }
 export async function setHabit(habitId, done) {
-  await supabase.from('habit_log').upsert(
+  const { error } = await supabase.from('habit_log').upsert(
     { date: today(), habit_id: habitId, done },
     { onConflict: 'date,habit_id' }
   )
+  if (error) console.error('setHabit error:', error)
 }
 
-// ── MEASUREMENTS ────────────────────────────────────────────────────────────
+// ── MEASUREMENTS ─────────────────────────────────────────────────────────────
 export async function getAllMeasurements() {
-  const { data } = await supabase.from('measurements').select('date, waist, hips, thighs').order('date', { ascending: true })
+  const { data, error } = await supabase.from('measurements').select('date, waist, hips, thighs').order('date', { ascending: true })
+  if (error) console.error('getAllMeasurements error:', error)
   return data ?? []
 }
 export async function logMeasurements({ waist, hips, thighs }) {
-  await supabase.from('measurements').upsert({ date: today(), waist, hips, thighs }, { onConflict: 'date' })
+  const { error } = await supabase.from('measurements').upsert({ date: today(), waist, hips, thighs }, { onConflict: 'date' })
+  if (error) console.error('logMeasurements error:', error)
 }
 
-// ── GYM HISTORY ─────────────────────────────────────────────────────────────
-// Get last N sessions for a specific exercise
+// ── GYM HISTORY ──────────────────────────────────────────────────────────────
 export async function getGymHistory(dayId, exIdx, limit = 5) {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('gym_history')
     .select('date, set_idx, kg, reps')
     .eq('day_id', dayId)
     .eq('ex_idx', exIdx)
     .order('date', { ascending: false })
     .order('set_idx', { ascending: true })
-    .limit(limit * 10) // grab enough rows to cover multiple sets
+    .limit(limit * 10)
+  if (error) console.error('getGymHistory error:', error)
   return data ?? []
 }
 export async function saveGymSets(dayId, exIdx, sets) {
-  // sets: [{setIdx, kg, reps}]
   const rows = sets
-    .filter(s => s.kg && s.reps)
-    .map(s => ({ date: today(), day_id: dayId, ex_idx: exIdx, set_idx: s.setIdx, kg: s.kg, reps: s.reps }))
-  if (rows.length) await supabase.from('gym_history').insert(rows)
+    .filter(s => s.kg !== '' && s.kg != null && s.reps !== '' && s.reps != null)
+    .map(s => ({
+      date: today(),
+      day_id: dayId,
+      ex_idx: exIdx,
+      set_idx: s.setIdx,
+      kg: parseFloat(s.kg),
+      reps: parseInt(s.reps),
+    }))
+  if (rows.length) {
+    const { error } = await supabase.from('gym_history').insert(rows)
+    if (error) console.error('saveGymSets error:', error)
+  }
+  return rows.length
 }
 
-// ── GYM SETS TODAY (temp buffer) ────────────────────────────────────────────
+// ── GYM SETS TODAY ───────────────────────────────────────────────────────────
 export async function getTodayGymSets() {
-  const { data } = await supabase.from('gym_sets_today').select('day_id, ex_idx, set_idx, kg, reps').eq('date', today())
+  const { data, error } = await supabase
+    .from('gym_sets_today')
+    .select('day_id, ex_idx, set_idx, kg, reps')
+    .eq('date', today())
+  if (error) console.error('getTodayGymSets error:', error)
   const map = {}
-  ;(data ?? []).forEach(r => { map[`${r.day_id}:${r.ex_idx}:${r.set_idx}`] = { kg: r.kg?.toString() ?? '', reps: r.reps?.toString() ?? '' } })
+  ;(data ?? []).forEach(r => {
+    map[`${r.day_id}:${r.ex_idx}:${r.set_idx}`] = {
+      kg: r.kg?.toString() ?? '',
+      reps: r.reps?.toString() ?? '',
+    }
+  })
   return map
 }
 export async function upsertGymSetToday(dayId, exIdx, setIdx, kg, reps) {
-  await supabase.from('gym_sets_today').upsert(
-    { date: today(), day_id: dayId, ex_idx: exIdx, set_idx: setIdx, kg: kg || null, reps: reps ? parseInt(reps) : null, updated_at: new Date().toISOString() },
+  const { error } = await supabase.from('gym_sets_today').upsert(
+    {
+      date: today(), day_id: dayId, ex_idx: exIdx, set_idx: setIdx,
+      kg: kg ? parseFloat(kg) : null,
+      reps: reps ? parseInt(reps) : null,
+      updated_at: new Date().toISOString(),
+    },
     { onConflict: 'date,day_id,ex_idx,set_idx' }
   )
+  if (error) console.error('upsertGymSetToday error:', error)
 }
 
-// ── STREAK ──────────────────────────────────────────────────────────────────
+// ── STREAK ───────────────────────────────────────────────────────────────────
 export async function loadAndUpdateStreak() {
-  const meta = await getMeta('streak')
-  let streak = meta?.streak ?? 1
-  const lastVisit = meta?.lastVisit ?? today()
-
-  if (lastVisit !== today()) {
-    // Rolled to new day — bump or reset streak
-    streak = lastVisit === yesterday() ? streak + 1 : 1
-    await setMeta('streak', { streak, lastVisit: today() })
+  try {
+    const meta = await getMeta('streak')
+    let streak = meta?.streak ?? 1
+    const lastVisit = meta?.lastVisit ?? today()
+    if (lastVisit !== today()) {
+      streak = lastVisit === yesterday() ? streak + 1 : 1
+      await setMeta('streak', { streak, lastVisit: today() })
+    } else if (!meta) {
+      await setMeta('streak', { streak: 1, lastVisit: today() })
+    }
+    return streak
+  } catch (e) {
+    console.error('loadAndUpdateStreak error:', e)
+    return 1
   }
-  return streak
 }
