@@ -31,21 +31,28 @@ export const MILESTONES = [
   { weight: 65, label: 'GOAL — 65kg', emoji: '🦋' },
 ]
 
-export const DEFAULT_HABITS = [
-  { id: 'h1', name: '10,000 steps', icon: '👣' },
-  { id: 'h2', name: 'Gym session', icon: '🏋️' },
-  { id: 'h3', name: 'Diet on track', icon: '🥗' },
-  { id: 'h4', name: 'Daily stomach vacuum', icon: '🌀' },
-  { id: 'h5', name: 'Hip flexor stretch', icon: '🧘' },
-  { id: 'h6', name: 'Sleep 7.5h+', icon: '💤' },
-  { id: 'h7', name: 'Retatrutide dose', icon: '💊', weekly: true },
+// Daily habits — some are auto-checked from logged data
+export const DAILY_HABITS = [
+  { id: 'h_gym',     name: 'Gym session',          icon: '🏋️', auto: false },
+  { id: 'h_diet',    name: 'Diet on track',         icon: '🥗', auto: false },
+  { id: 'h_vacuum',  name: 'Stomach vacuum',        icon: '🌀', auto: false },
+  { id: 'h_stretch', name: 'Hip flexor stretch',    icon: '🧘', auto: false },
+  { id: 'h_steps',   name: '10,000 steps',          icon: '👣', auto: 'steps' },
+  { id: 'h_sleep',   name: 'Sleep 7.5h+',           icon: '💤', auto: 'sleep' },
+  { id: 'h_weight',  name: 'Weight logged',         icon: '⚖️', auto: 'weight' },
+]
+
+// Weekly habits — tracked separately
+export const WEEKLY_HABITS = [
+  { id: 'w_retratutide', name: 'Retatrutide dose',      icon: '💊' },
+  { id: 'w_measure',     name: 'Measurements logged',   icon: '📏', auto: 'measure' },
 ]
 
 export const TAG_CONFIG = {
-  g: { label: 'glute', bg: '#fef0f4', color: '#c45a7a', border: '#fadce5' },
-  c: { label: 'cardio', bg: '#e8f7fe', color: '#1a7fa8', border: '#b8e8f9' },
-  u: { label: 'upper', bg: '#f0f0f8', color: '#555', border: '#ddd' },
-  w: { label: 'waist', bg: '#e8fef0', color: '#1a7a45', border: '#b8ecd0' },
+  g: { label: 'glute',   bg: '#fef0f4', color: '#c45a7a', border: '#fadce5' },
+  c: { label: 'cardio',  bg: '#e8f7fe', color: '#1a7fa8', border: '#b8e8f9' },
+  u: { label: 'upper',   bg: '#f0f0f8', color: '#555',    border: '#ddd' },
+  w: { label: 'waist',   bg: '#e8fef0', color: '#1a7a45', border: '#b8ecd0' },
   p: { label: 'posture', bg: '#fef8e8', color: '#7a5c1a', border: '#f0dfa0' },
 }
 

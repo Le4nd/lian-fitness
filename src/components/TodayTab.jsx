@@ -1,20 +1,92 @@
-import { C, DEFAULT_HABITS, STEPS_GOAL, WATER_GOAL, START_W, TARGET_W } from '../lib/constants'
+import { C, DAILY_HABITS, WEEKLY_HABITS, STEPS_GOAL, WATER_GOAL, START_W, TARGET_W, todayStr } from '../lib/constants'
 import { s } from '../lib/styles'
 import { SleepLog } from './SleepLog'
 
-export function TodayTab({ habits, toggleHabit, weightLog, todayData, addWater, removeWater, selectedDate, sleepHours, onLogSleep }) {
+// Compute auto-checked state for a habit based on logged data
+function isAutoChecked(habit, todayData, weightLog, measureLog, selectedDate) {
+  if (!habit.auto) return null // not auto — returns null meaning "use manual state"
+  if (habit.auto === 'steps') return (todayData.steps ?? 0) >= STEPS_GOAL
+  if (habit.auto === 'sleep') return (todayData.sleep ?? 0) >= 7.5
+  if (habit.auto === 'weight') return weightLog.some(e => e.date === selectedDate)
+  return null
+}
+
+function isWeeklyAutoChecked(habit, measureLog) {
+  if (habit.auto !== 'measure') return null
+  const weekStart = (() => {
+    const d = new Date(); d.setDate(d.getDate() - d.getDay()); return d.toISOString().split('T')[0]
+  })()
+  return measureLog.some(m => m.date >= weekStart)
+}
+
+function HabitRow({ habit, done, onToggle, autoChecked, disabled }) {
+  const isAuto = autoChecked !== null
+  const checked = isAuto ? autoChecked : done
+
+  return (
+    <div
+      onClick={isAuto ? undefined : onToggle}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 12, padding: '13px 16px',
+        cursor: isAuto ? 'default' : 'pointer',
+        background: checked ? C.blueLight : C.white,
+        transition: 'background .2s',
+      }}
+    >
+      <div style={{
+        width: 24, height: 24, borderRadius: 7, flexShrink: 0,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: checked ? `linear-gradient(135deg,${C.blue},${C.pink})` : 'transparent',
+        border: checked ? 'none' : `1.5px solid ${C.neutralBorder}`,
+        transition: 'all .2s',
+        opacity: isAuto && !checked ? 0.5 : 1,
+      }}>
+        {checked && <span style={{ color: '#fff', fontSize: 14 }}>✓</span>}
+      </div>
+      <span style={{ fontSize: 15 }}>{habit.icon}</span>
+      <span style={{ fontSize: 14, flex: 1, color: checked ? C.textMuted : C.textMain, textDecoration: checked ? 'line-through' : 'none' }}>
+        {habit.name}
+      </span>
+      {isAuto && (
+        <span style={{ fontSize: 10, color: C.textMuted, background: C.neutral, padding: '2px 7px', borderRadius: 6, fontFamily: "'DM Sans',sans-serif" }}>
+          auto
+        </span>
+      )}
+    </div>
+  )
+}
+
+export function TodayTab({ habits, toggleHabit, weeklyHabits, toggleWeeklyHabit, weightLog, todayData, addWater, removeWater, selectedDate, sleepHours, onLogSleep, measureLog }) {
   const latestW = weightLog[weightLog.length - 1]?.weight ?? START_W
   const lostKg = Math.max(0, START_W - latestW).toFixed(1)
   const toGoKg = Math.max(0, latestW - TARGET_W).toFixed(1)
   const weightPct = Math.min(100, Math.round(((START_W - latestW) / (START_W - TARGET_W)) * 100))
-  const doneCount = habits.filter(h => h.done).length
-  const habitPct = Math.round((doneCount / habits.length) * 100)
   const todaySteps = todayData.steps ?? null
   const todayWater = todayData.water ?? 0
-  const isToday = selectedDate === new Date().toISOString().split('T')[0]
+
+  // Compute effective checked state for each daily habit
+  const effectiveHabits = DAILY_HABITS.map(h => {
+    const autoChecked = isAutoChecked(h, todayData, weightLog, measureLog, selectedDate)
+    const manualDone = habits[h.id] ?? false
+    return { ...h, effectiveDone: autoChecked !== null ? autoChecked : manualDone, autoChecked }
+  })
+
+  // Compute effective checked state for weekly habits
+  const effectiveWeekly = WEEKLY_HABITS.map(h => {
+    const autoChecked = isWeeklyAutoChecked(h, measureLog)
+    const manualDone = weeklyHabits[h.id] ?? false
+    return { ...h, effectiveDone: autoChecked !== null ? autoChecked : manualDone, autoChecked }
+  })
+
+  const dailyDone = effectiveHabits.filter(h => h.effectiveDone).length
+  const weeklyDone = effectiveWeekly.filter(h => h.effectiveDone).length
+  const totalDone = dailyDone + weeklyDone
+  const totalHabits = DAILY_HABITS.length + WEEKLY_HABITS.length
+  const habitPct = Math.round((totalDone / totalHabits) * 100)
 
   return (
     <>
+      {/* Stats */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginBottom: 20 }}>
         {[
           { label: 'weight', value: `${latestW}kg`, bg: C.blueLight, border: C.blueMid, color: C.blueDeep },
@@ -28,6 +100,7 @@ export function TodayTab({ habits, toggleHabit, weightLog, todayData, addWater, 
         ))}
       </div>
 
+      {/* Progress bar */}
       <div style={{ marginBottom: 20 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: C.textMuted, marginBottom: 6 }}>
           <span>Progress to 65kg</span>
@@ -69,32 +142,43 @@ export function TodayTab({ habits, toggleHabit, weightLog, todayData, addWater, 
       </div>
 
       {/* Sleep */}
-      <div style={{ marginBottom: 12 }}>
+      <div style={{ marginBottom: 16 }}>
         <SleepLog sleepHours={sleepHours} onSave={onLogSleep} selectedDate={selectedDate} />
       </div>
 
-      {/* Habits */}
-      <span style={s.lbl}>Daily checklist — {doneCount}/{habits.length}</span>
-      <div style={s.card}>
-        {habits.map((h, i) => (
-          <div key={h.id} onClick={() => toggleHabit(h.id)} style={{
-            display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px',
-            borderBottom: i < habits.length - 1 ? `1px solid ${C.neutral}` : 'none',
-            cursor: 'pointer',
-            background: h.done ? (i % 2 === 0 ? C.blueLight : C.pinkLight) : C.white,
-            transition: 'background .2s',
-          }}>
-            <div style={{ width: 24, height: 24, borderRadius: 7, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: h.done ? `linear-gradient(135deg,${C.blue},${C.pink})` : 'transparent', border: h.done ? 'none' : `1.5px solid ${C.neutralBorder}`, transition: 'all .2s' }}>
-              {h.done && <span style={{ color: '#fff', fontSize: 14 }}>✓</span>}
-            </div>
-            <span style={{ fontSize: 15 }}>{h.icon}</span>
-            <span style={{ fontSize: 14, flex: 1, color: h.done ? C.textMuted : C.textMain, textDecoration: h.done ? 'line-through' : 'none' }}>{h.name}</span>
-            {h.weekly && <span style={{ fontSize: 10, color: C.textMuted, background: C.neutral, padding: '2px 7px', borderRadius: 6 }}>weekly</span>}
+      {/* Daily habits */}
+      <span style={s.lbl}>Daily — {dailyDone}/{DAILY_HABITS.length}</span>
+      <div style={{ ...s.card, marginBottom: 16 }}>
+        {effectiveHabits.map((h, i) => (
+          <div key={h.id} style={{ borderBottom: i < effectiveHabits.length - 1 ? `1px solid ${C.neutral}` : 'none' }}>
+            <HabitRow
+              habit={h}
+              done={habits[h.id] ?? false}
+              autoChecked={h.autoChecked}
+              onToggle={() => toggleHabit(h.id)}
+            />
           </div>
         ))}
       </div>
+
+      {/* Weekly habits */}
+      <span style={s.lbl}>Weekly — {weeklyDone}/{WEEKLY_HABITS.length}</span>
+      <div style={{ ...s.card, marginBottom: 16 }}>
+        {effectiveWeekly.map((h, i) => (
+          <div key={h.id} style={{ borderBottom: i < effectiveWeekly.length - 1 ? `1px solid ${C.neutral}` : 'none' }}>
+            <HabitRow
+              habit={h}
+              done={weeklyHabits[h.id] ?? false}
+              autoChecked={h.autoChecked}
+              onToggle={() => toggleWeeklyHabit(h.id)}
+            />
+          </div>
+        ))}
+      </div>
+
+      {/* Overall progress */}
       <div style={s.pBar}><div style={s.pFill(habitPct)} /></div>
-      <div style={{ fontSize: 11, color: C.textMuted, textAlign: 'right', marginTop: 4 }}>{habitPct}% of daily goals</div>
+      <div style={{ fontSize: 11, color: C.textMuted, textAlign: 'right', marginTop: 4 }}>{habitPct}% of all goals today</div>
     </>
   )
 }

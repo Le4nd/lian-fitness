@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { C, DEFAULT_HABITS, MILESTONES, todayStr, ROUTINE } from './lib/constants'
+import { C, DAILY_HABITS, WEEKLY_HABITS, MILESTONES, todayStr, ROUTINE } from './lib/constants'
 import { s } from './lib/styles'
 import * as db from './lib/db'
 import { SyncDot } from './components/SyncDot'
@@ -70,10 +70,12 @@ export default function App() {
   const [notifGranted, setNotifGranted] = useState(false)
 
   const [streak, setStreak] = useState(1)
-  const [habits, setHabits] = useState(DEFAULT_HABITS.map(h => ({ ...h, done: false })))
+  // Daily habits: { date: { habitId: bool } }
+  const [habitsLog, setHabitsLog] = useState({})
+  // Weekly habits: { habitId: bool } — current week only
+  const [weeklyHabits, setWeeklyHabits] = useState({})
   const [weightLog, setWeightLog] = useState([])
   const [dailyLog, setDailyLog] = useState({})
-  const [habitsLog, setHabitsLog] = useState({})
   const [measureLog, setMeasureLog] = useState([])
   const [gymHistory, setGymHistory] = useState({})
   const [gymSets, setGymSets] = useState({})
@@ -87,11 +89,10 @@ export default function App() {
   const debounceRef = useRef({})
 
   const todayData = dailyLog[selectedDate] ?? {}
-  const selectedHabits = DEFAULT_HABITS.map(h => ({ ...h, done: habitsLog[selectedDate]?.[h.id] ?? false }))
   const selectedGymSets = gymSets[selectedDate] ?? {}
   const isToday = selectedDate === todayStr()
 
-  // ── LOAD ─────────────────────────────────────────────────────────────────
+  // ── LOAD ──────────────────────────────────────────────────────────────────
   useEffect(() => {
     ;(async () => {
       try {
@@ -106,14 +107,16 @@ export default function App() {
         setWeightLog(weights)
 
         const dates30 = Array.from({ length: 30 }, (_, i) => { const d = new Date(); d.setDate(d.getDate() - i); return d.toISOString().split('T')[0] })
-        const [dailyMap, habitsMap, gs] = await Promise.all([
-          db.getDailyRange(dates30), db.getHabitsRange(dates30), db.getGymSetsForDate(todayStr()),
+        const [dailyMap, habitsMap, gs, wh] = await Promise.all([
+          db.getDailyRange(dates30),
+          db.getHabitsRange(dates30),
+          db.getGymSetsForDate(todayStr()),
+          db.getMeta('weekly_habits'),
         ])
         setDailyLog(dailyMap)
         setHabitsLog(habitsMap)
         setGymSets({ [todayStr()]: gs })
-        const todayHabits = habitsMap[todayStr()] ?? {}
-        if (Object.keys(todayHabits).length > 0) setHabits(DEFAULT_HABITS.map(h => ({ ...h, done: todayHabits[h.id] ?? false })))
+        setWeeklyHabits(wh ?? {})
 
         const histMap = {}
         for (const day of ROUTINE.filter(d => !d.rest)) {
@@ -125,8 +128,6 @@ export default function App() {
         }
         setGymHistory(histMap)
         setSyncStatus('idle')
-
-        // Notifications
         if (Notification?.permission === 'granted') { setNotifGranted(true); scheduleNotifications() }
       } catch (err) { console.error('Load error:', err); setSyncStatus('error') }
     })()
@@ -156,8 +157,14 @@ export default function App() {
   const toggleHabit = async (id) => {
     const next = !(habitsLog[selectedDate]?.[id] ?? false)
     setHabitsLog(prev => ({ ...prev, [selectedDate]: { ...(prev[selectedDate] ?? {}), [id]: next } }))
-    if (isToday) setHabits(prev => prev.map(h => h.id === id ? { ...h, done: next } : h))
     await withSync(() => db.setHabitForDate(selectedDate, id, next))
+  }
+
+  const toggleWeeklyHabit = async (id) => {
+    const next = !(weeklyHabits[id] ?? false)
+    const updated = { ...weeklyHabits, [id]: next }
+    setWeeklyHabits(updated)
+    await withSync(() => db.setMeta('weekly_habits', updated))
   }
 
   const addWater = async () => {
@@ -193,7 +200,7 @@ export default function App() {
   const logWeight = () => doLogWeight(parseFloat(newWeight))
 
   const doLogCalories = async (c) => {
-    if (!c || c < 0 || c > 10000) return
+    if (!c || c < 0) return
     patchDaily(selectedDate, 'calories', c)
     setNewCal('')
     await withSync(() => db.updateDailyForDate(selectedDate, 'calories', c))
@@ -297,9 +304,20 @@ export default function App() {
       <div style={{ padding: '16px 16px', paddingBottom: 'calc(100px + env(safe-area-inset-bottom))' }}>
         {tab === 'today' && (
           <>
-            <TodayTab habits={selectedHabits} toggleHabit={toggleHabit} weightLog={weightLog}
-              todayData={todayData} addWater={addWater} removeWater={removeWater}
-              selectedDate={selectedDate} sleepHours={todayData.sleep ?? null} onLogSleep={logSleep} />
+            <TodayTab
+              habits={habitsLog[selectedDate] ?? {}}
+              toggleHabit={toggleHabit}
+              weeklyHabits={weeklyHabits}
+              toggleWeeklyHabit={toggleWeeklyHabit}
+              weightLog={weightLog}
+              todayData={todayData}
+              addWater={addWater}
+              removeWater={removeWater}
+              selectedDate={selectedDate}
+              sleepHours={todayData.sleep ?? null}
+              onLogSleep={logSleep}
+              measureLog={measureLog}
+            />
             {!notifGranted && isToday && (
               <div style={{ background: C.blueLight, borderRadius: 14, padding: '12px 16px', border: `1px solid ${C.blueMid}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
                 <div>
@@ -315,25 +333,16 @@ export default function App() {
         {tab === 'diet' && <DietTab todayData={todayData} weightLog={weightLog} newCal={newCal} setNewCal={setNewCal} logCalories={logCalories} newSteps={newSteps} setNewSteps={setNewSteps} logSteps={logSteps} selectedDate={selectedDate} />}
         {tab === 'weight' && (
           <>
-            <div style={{ marginBottom: 16 }}>
-              <WeightChart weightLog={weightLog} />
-            </div>
+            <div style={{ marginBottom: 16 }}><WeightChart weightLog={weightLog} /></div>
             <WeightTab weightLog={weightLog} newWeight={newWeight} setNewWeight={setNewWeight} logWeight={logWeight} selectedDate={selectedDate} />
           </>
         )}
         {tab === 'body' && <BodyTab measureLog={measureLog} newMeasure={newMeasure} setNewMeasure={setNewMeasure} logMeasurements={logMeasurements} selectedDate={selectedDate} />}
-        {tab === 'week' && <WeekTab habits={habits} weightLog={weightLog} dailyLog={dailyLog} habitsLog={habitsLog} setSelectedDate={(d) => { setSelectedDate(d); setTab('today') }} />}
+        {tab === 'week' && <WeekTab weightLog={weightLog} dailyLog={dailyLog} habitsLog={habitsLog} setSelectedDate={(d) => { setSelectedDate(d); setTab('today') }} />}
         {tab === 'goals' && <GoalsTab weightLog={weightLog} />}
       </div>
 
-      <QuickLog
-        selectedDate={selectedDate}
-        onLogWeight={doLogWeight}
-        onLogSteps={doLogSteps}
-        onLogCalories={doLogCalories}
-        onAddWater={addWater}
-        onLogSleep={logSleep}
-      />
+      <QuickLog selectedDate={selectedDate} onLogWeight={doLogWeight} onLogSteps={doLogSteps} onLogCalories={doLogCalories} onAddWater={addWater} onLogSleep={logSleep} />
     </div>
   )
 }
