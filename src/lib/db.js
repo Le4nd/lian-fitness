@@ -96,7 +96,7 @@ export async function saveGymSets(dayId, exIdx, sets, date) {
     .filter(s => s.kg !== '' && s.kg != null && s.reps !== '' && s.reps != null)
     .map(s => ({ date: d, day_id: dayId, ex_idx: exIdx, set_idx: s.setIdx, kg: parseFloat(s.kg), reps: parseInt(s.reps) }))
   if (rows.length) {
-    const { error } = await supabase.from('gym_history').insert(rows)
+    const { error } = await supabase.from('gym_history').upsert(rows, { onConflict: 'date,day_id,ex_idx,set_idx' })
     if (error) console.error('saveGymSets error:', error)
   }
   return rows.length
