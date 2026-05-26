@@ -1,4 +1,4 @@
-import { C, MILESTONES, DEFAULT_HABITS, START_W, TARGET_W, todayStr } from '../lib/constants'
+import { C, MILESTONES, DAILY_HABITS, START_W, TARGET_W, todayStr } from '../lib/constants'
 import { s } from '../lib/styles'
 
 export function WeightTab({ weightLog, newWeight, setNewWeight, logWeight, selectedDate }) {
@@ -124,7 +124,7 @@ export function WeekTab({ habits, weightLog, dailyLog, habitsLog, setSelectedDat
     const days = weekDates.map(d => {
       if (d === today) return habitPct
       const snap = habitsLog[d]
-      return snap ? Math.round((Object.values(snap).filter(Boolean).length / DEFAULT_HABITS.length) * 100) : null
+      return snap ? Math.round((Object.values(snap).filter(Boolean).length / DAILY_HABITS.length) * 100) : null
     }).filter(x => x !== null)
     return days.length ? Math.round(days.reduce((a, b) => a + b, 0) / days.length) : 0
   }
@@ -172,7 +172,7 @@ export function WeekTab({ habits, weightLog, dailyLog, habitsLog, setSelectedDat
                   </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  {done !== null ? <span style={{ fontSize: 13, fontWeight: 600, color: done >= DEFAULT_HABITS.length ? C.green : C.textMuted }}>{done}/{DEFAULT_HABITS.length}</span> : <span style={{ fontSize: 12, color: C.textMuted }}>—</span>}
+                  {done !== null ? <span style={{ fontSize: 13, fontWeight: 600, color: done >= DAILY_HABITS.length ? C.green : C.textMuted }}>{done}/{DAILY_HABITS.length}</span> : <span style={{ fontSize: 12, color: C.textMuted }}>—</span>}
                   <span style={{ fontSize: 12, color: C.textMuted }}>›</span>
                 </div>
               </div>
