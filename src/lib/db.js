@@ -86,9 +86,12 @@ export async function getGymHistory(dayId, exIdx, limit = 5) {
     .from('gym_history').select('date, set_idx, kg, reps')
     .eq('day_id', dayId).eq('ex_idx', exIdx)
     .order('date', { ascending: false }).order('set_idx', { ascending: true })
-    .limit(limit * 10)
+    .limit(limit * 6)
   if (error) console.error('getGymHistory error:', error)
-  return data ?? []
+  if (!data || data.length === 0) return []
+  // Only return sets from the most recent session date for this specific day
+  const mostRecent = data[0].date
+  return data.filter(r => r.date === mostRecent)
 }
 export async function saveGymSets(dayId, exIdx, sets, date) {
   const d = date ?? today()
