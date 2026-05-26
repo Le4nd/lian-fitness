@@ -118,22 +118,32 @@ export function WeekTab({ weightLog, dailyLog, habitsLog, setSelectedDate }) {
   const weekDates = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(); d.setDate(d.getDate() - (6 - i)); return d.toISOString().split('T')[0]
   })
-  const todayHabits = habitsLog[today] ?? {}
-  const todayDoneCount = Object.values(todayHabits).filter(Boolean).length
+
+  // Only count actual habit IDs, not DB metadata fields like id/date/created_at
+  const HABIT_IDS = DAILY_HABITS.map(h => h.id)
+  const countDone = (snap) => {
+    if (!snap || typeof snap !== 'object') return null
+    return HABIT_IDS.filter(id => snap[id] === true).length
+  }
+
   const weekHabitAvg = () => {
     const days = weekDates.map(d => {
-      const snap = habitsLog[d]
-      return snap ? Math.round((Object.values(snap).filter(Boolean).length / DAILY_HABITS.length) * 100) : null
+      const n = countDone(habitsLog[d])
+      return n !== null ? Math.round((n / DAILY_HABITS.length) * 100) : null
     }).filter(x => x !== null)
     return days.length ? Math.round(days.reduce((a, b) => a + b, 0) / days.length) : 0
   }
-  const weekGymDays = () => weekDates.filter(d => habitsLog[d]?.h_gym).length
+
+  const weekGymDays = () => weekDates.filter(d => habitsLog[d]?.h_gym === true).length
   const weekWeightChange = () => {
-    const inRange = weightLog.filter(e => weekDates.includes(e.date))
+    const inRange = (weightLog ?? []).filter(e => weekDates.includes(e.date))
     if (inRange.length < 2) return null
     return (inRange[inRange.length - 1].weight - inRange[0].weight).toFixed(1)
   }
+
+  const todayDone = countDone(habitsLog[today]) ?? 0
   const wc = weekWeightChange()
+
   return (
     <>
       <span style={s.lbl}>This week</span>
@@ -142,19 +152,19 @@ export function WeekTab({ weightLog, dailyLog, habitsLog, setSelectedDate }) {
           { label: 'habit avg', value: `${weekHabitAvg()}%`, bg: C.blueLight, border: C.blueMid, color: C.blueDeep },
           { label: 'gym days', value: `${weekGymDays()}/7`, bg: C.pinkLight, border: C.pinkMid, color: C.pinkDeep },
           { label: 'weight change', value: wc === null ? '—' : +wc < 0 ? `${wc} kg` : wc === '0.0' ? 'stable' : `+${wc} kg`, bg: wc !== null && +wc < 0 ? C.greenLight : C.pinkLight, border: wc !== null && +wc < 0 ? C.greenBorder : C.pinkMid, color: wc !== null && +wc < 0 ? C.green : C.pinkDeep },
-          { label: 'today habits', value: `${todayDoneCount}/${DAILY_HABITS.length}`, bg: C.blueLight, border: C.blueMid, color: C.blueDeep },
+          { label: 'today habits', value: `${todayDone}/${DAILY_HABITS.length}`, bg: C.blueLight, border: C.blueMid, color: C.blueDeep },
         ].map(sc => (
           <div key={sc.label} style={s.statCard(sc.bg, sc.border, sc.color)}>
             <div style={s.statNum}>{sc.value}</div><div style={s.statLbl}>{sc.label}</div>
           </div>
         ))}
       </div>
+
       <span style={s.lbl}>Tap any day to edit it</span>
       <div style={s.card}>
         {weekDates.map((d, i) => {
           const isToday = d === today
-          const snap = habitsLog[d]
-          const done = snap ? Object.values(snap).filter(Boolean).length : null
+          const done = countDone(habitsLog[d])
           const steps = dailyLog[d]?.steps
           const cal = dailyLog[d]?.calories
           return (
@@ -171,7 +181,9 @@ export function WeekTab({ weightLog, dailyLog, habitsLog, setSelectedDate }) {
                   </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  {done !== null ? <span style={{ fontSize: 13, fontWeight: 600, color: done >= DAILY_HABITS.length ? C.green : C.textMuted }}>{done}/{DAILY_HABITS.length}</span> : <span style={{ fontSize: 12, color: C.textMuted }}>—</span>}
+                  {done !== null
+                    ? <span style={{ fontSize: 13, fontWeight: 600, color: done >= DAILY_HABITS.length ? C.green : C.textMuted }}>{done}/{DAILY_HABITS.length}</span>
+                    : <span style={{ fontSize: 12, color: C.textMuted }}>—</span>}
                   <span style={{ fontSize: 12, color: C.textMuted }}>›</span>
                 </div>
               </div>
@@ -182,6 +194,7 @@ export function WeekTab({ weightLog, dailyLog, habitsLog, setSelectedDate }) {
     </>
   )
 }
+
 
 export function GoalsTab({ weightLog }) {
   const latestW = weightLog[weightLog.length - 1]?.weight ?? START_W
