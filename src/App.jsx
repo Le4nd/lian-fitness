@@ -215,6 +215,21 @@ export default function App() {
   }
   const logSteps = () => doLogSteps(parseInt(newSteps))
 
+  const logExercise = async ({ exercise_calories, exercise_duration, exercise_distance }) => {
+    await withSync(async () => {
+      if (exercise_calories !== undefined) patchDaily(selectedDate, 'exercise_calories', exercise_calories)
+      if (exercise_duration !== undefined) patchDaily(selectedDate, 'exercise_duration', exercise_duration)
+      if (exercise_distance !== undefined) patchDaily(selectedDate, 'exercise_distance', exercise_distance)
+      const updates = {}
+      if (exercise_calories !== undefined) updates.exercise_calories = exercise_calories
+      if (exercise_duration !== undefined) updates.exercise_duration = exercise_duration
+      if (exercise_distance !== undefined) updates.exercise_distance = exercise_distance
+      for (const [field, value] of Object.entries(updates)) {
+        await db.updateDailyForDate(selectedDate, field, value)
+      }
+    })
+  }
+
   const logMeasurements = async () => {
     const { waist, hips, thighs } = newMeasure
     if (!waist && !hips && !thighs) return
@@ -330,7 +345,7 @@ export default function App() {
           </>
         )}
         {tab === 'gym' && <GymTab gymDay={gymDay} setGymDay={setGymDay} todayGymSets={selectedGymSets} gymHistory={gymHistory} onSetChange={handleSetChange} onSaveHistory={handleSaveHistory} selectedDate={selectedDate} />}
-        {tab === 'diet' && <DietTab todayData={todayData} weightLog={weightLog} newCal={newCal} setNewCal={setNewCal} logCalories={logCalories} newSteps={newSteps} setNewSteps={setNewSteps} logSteps={logSteps} selectedDate={selectedDate} />}
+        {tab === 'diet' && <DietTab todayData={todayData} weightLog={weightLog} newCal={newCal} setNewCal={setNewCal} logCalories={logCalories} newSteps={newSteps} setNewSteps={setNewSteps} logSteps={logSteps} onLogExercise={logExercise} selectedDate={selectedDate} />}
         {tab === 'weight' && (
           <>
             <div style={{ marginBottom: 16 }}><WeightChart weightLog={weightLog} /></div>
