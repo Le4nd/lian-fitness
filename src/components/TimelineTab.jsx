@@ -3,6 +3,13 @@ import { C, START_W, TARGET_W, todayStr } from '../lib/constants'
 import { s } from '../lib/styles'
 
 const GOAL_W = TARGET_W
+
+const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+function getMonthLabel(offset) {
+  const d = new Date()
+  d.setMonth(d.getMonth() + offset)
+  return MONTH_NAMES[d.getMonth()] + ' ' + d.getFullYear()
+}
 const START_WAIST = 97
 const START_HIPS = 114
 
@@ -65,7 +72,7 @@ function compute({ startW, startWaist, startHips, startThighs, gymDays, walkDays
     if (factors.hrt && m === 2) badges.push({ label: 'HRT redistribution starts', type: 'purple' })
     if (factors.retatrutide && m === 1) badges.push({ label: 'Retatrutide fully active', type: 'blue' })
 
-    rows.push({ m, w: w.toFixed(1), waist: waist.toFixed(1), hips: hips.toFixed(1), thighs: thighs.toFixed(1), whr, badges, isMilestone: hit.length > 0 })
+    rows.push({ m, w: w.toFixed(1), waist: waist.toFixed(1), hips: hips.toFixed(1), thighs: thighs.toFixed(1), whr, badges, isMilestone: hit.length > 0, monthLabel: getMonthLabel(m - 1) })
     if (w <= GOAL_W) break
   }
 
@@ -197,7 +204,7 @@ export function TimelineTab({ weightLog, measureLog, dailyLog }) {
         {rows.map((r, i) => (
           <div key={r.m} style={{ display: 'grid', gridTemplateColumns: '72px 1fr', borderBottom: i < rows.length - 1 ? `1px solid ${C.neutral}` : 'none' }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: r.isMilestone ? C.red : C.textMuted, padding: '14px 10px 14px 0', borderRight: `2px solid ${r.isMilestone ? C.red : C.neutralBorder}`, textAlign: 'right', position: 'relative' }}>
-              Month {r.m}
+              {getMonthLabel(r.m - 1)}
               <div style={{ width: r.isMilestone ? 10 : 8, height: r.isMilestone ? 10 : 8, borderRadius: '50%', background: r.isMilestone ? C.red : C.neutralBorder, position: 'absolute', right: r.isMilestone ? -6 : -5, top: '50%', transform: 'translateY(-50%)' }} />
             </div>
             <div style={{ padding: '12px 0 12px 16px' }}>
