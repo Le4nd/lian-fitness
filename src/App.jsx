@@ -9,6 +9,7 @@ import { DietTab } from './components/DietTab'
 import { WeightTab, BodyTab, WeekTab, GoalsTab } from './components/Tabs'
 import { QuickLog } from './components/QuickLog'
 import { WeightChart } from './components/WeightChart'
+import { TimelineTab } from './components/TimelineTab'
 import { enableNotifications, scheduleNotifications } from './lib/notifications'
 
 const TABS = [
@@ -19,6 +20,7 @@ const TABS = [
   { id: 'body',  label: 'Body',  icon: '📏' },
   { id: 'week',  label: 'Week',  icon: '📊' },
   { id: 'goals', label: 'Goals', icon: '🦋' },
+  { id: 'timeline', label: 'Timeline', icon: '📅' },
 ]
 
 function formatDateLabel(dateStr) {
@@ -355,6 +357,7 @@ export default function App() {
         {tab === 'body' && <BodyTab measureLog={measureLog} newMeasure={newMeasure} setNewMeasure={setNewMeasure} logMeasurements={logMeasurements} selectedDate={selectedDate} />}
         {tab === 'week' && <WeekTab weightLog={weightLog} dailyLog={dailyLog} habitsLog={habitsLog} setSelectedDate={(d) => { setSelectedDate(d); setTab('today') }} />}
         {tab === 'goals' && <GoalsTab weightLog={weightLog} />}
+        {tab === 'timeline' && <TimelineTab weightLog={weightLog} measureLog={measureLog} dailyLog={dailyLog} />}
       </div>
 
       <QuickLog selectedDate={selectedDate} onLogWeight={doLogWeight} onLogSteps={doLogSteps} onLogCalories={doLogCalories} onAddWater={addWater} onLogSleep={logSleep} />
