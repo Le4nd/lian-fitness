@@ -139,3 +139,84 @@ export const ROUTINE = [
   },
   { id: 'd7', label: 'D7', name: 'Rest', rest: true },
 ]
+
+export const HOME_ROUTINE = [
+  {
+    id: 'h1', label: 'D1', name: 'Glutes A (Home)', rest: false, badge: null,
+    desc: 'Bodyweight glute focus — bedroom floor space.',
+    sections: [
+      { title: 'Warm-up', exs: [{ n: 'Marching in place / high knees', tag: 'c', sets: 1, reps: '3 min', w: 'Bodyweight', note: 'Get blood flowing before glute work.' }] },
+      { title: 'Main', exs: [
+        { n: 'Glute bridge', tag: 'g', sets: 4, reps: '20', w: 'Bodyweight', note: '2 sec squeeze at top.' },
+        { n: 'Single-leg glute bridge', tag: 'g', sets: 3, reps: '12 each leg', w: 'Bodyweight', note: 'Keep hips level.' },
+        { n: 'Donkey kicks', tag: 'g', sets: 3, reps: '20 each leg', w: 'Bodyweight' },
+        { n: 'Fire hydrants', tag: 'g', sets: 3, reps: '15 each leg', w: 'Bodyweight' },
+      ]},
+    ],
+  },
+  {
+    id: 'h2', label: 'D2', name: 'Lower Body B (Home)', rest: false, badge: null,
+    desc: 'Volume day, bodyweight squats and lunges.',
+    sections: [
+      { title: 'Warm-up', exs: [{ n: 'Bodyweight squats (slow)', tag: 'c', sets: 1, reps: '15', w: 'Bodyweight', note: 'Warm up the knees and hips.' }] },
+      { title: 'Main', exs: [
+        { n: 'Bulgarian split squat (chair/bed assisted)', tag: 'g', sets: 3, reps: '15 each leg', w: 'Bodyweight' },
+        { n: 'Reverse lunge', tag: '', sets: 3, reps: '15 each leg', w: 'Bodyweight' },
+        { n: 'Sumo squat', tag: '', sets: 3, reps: '20', w: 'Bodyweight', note: 'Wide stance, toes out.' },
+        { n: 'Wall sit', tag: '', sets: 3, reps: '40–60 sec', w: 'Bodyweight' },
+      ]},
+    ],
+  },
+  { id: 'h3', label: 'D3', name: 'Rest', rest: true },
+  {
+    id: 'h4', label: 'D4', name: 'Upper Body (Home, Light)', rest: false, badge: 'upper',
+    desc: 'Shape and posture only — no equipment needed.',
+    sections: [
+      { title: 'Main', exs: [
+        { n: 'Push-ups (knee variation OK)', tag: 'u', sets: 3, reps: '10–15', w: 'Bodyweight' },
+        { n: 'Superman raises', tag: 'u', sets: 3, reps: '15', w: 'Bodyweight', note: 'Targets upper back posture.' },
+        { n: 'Pike push-ups', tag: 'u', sets: 3, reps: '8–12', w: 'Bodyweight', note: 'Shoulders.' },
+        { n: 'Tricep dips (chair/bed edge)', tag: 'u', sets: 3, reps: '12–15', w: 'Bodyweight' },
+        { n: 'Arm circles', tag: 'u', sets: 2, reps: '30 sec each direction', w: 'Bodyweight' },
+      ]},
+    ],
+  },
+  {
+    id: 'h5', label: 'D5', name: 'Waist + Hourglass (Home)', rest: false, badge: 'waist',
+    desc: 'Dedicated waist and hip session, no equipment.',
+    sections: [
+      { title: 'Waist work', exs: [
+        { n: 'Stomach vacuum', tag: 'w', sets: 5, reps: '45–60 sec', w: 'Bodyweight' },
+        { n: 'Dead bug', tag: 'w', sets: 4, reps: '12 each side', w: 'Bodyweight' },
+        { n: 'Plank', tag: 'w', sets: 4, reps: '45–60 sec', w: 'Bodyweight' },
+        { n: 'Side plank', tag: 'w', sets: 3, reps: '30–40 sec each side', w: 'Bodyweight', note: 'Also hits obliques + glute medius.' },
+      ]},
+      { title: 'Hip flare', exs: [
+        { n: 'Side-lying hip abduction', tag: 'g', sets: 4, reps: '20 each side', w: 'Bodyweight' },
+        { n: 'Clamshell', tag: 'g', sets: 4, reps: '20 each side', w: 'Bodyweight' },
+        { n: 'Standing hip abduction', tag: 'g', sets: 3, reps: '20 each side', w: 'Bodyweight', note: 'Hold a wall or chair for balance.' },
+        { n: 'Glute bridge (high rep)', tag: 'g', sets: 3, reps: '30', w: 'Bodyweight' },
+      ]},
+      { title: 'Posture', exs: [
+        { n: 'Hip flexor stretch', tag: 'p', sets: 3, reps: '60 sec each side', w: 'Bodyweight' },
+        { n: 'Cat-cow', tag: 'p', sets: 2, reps: '15 slow reps', w: 'Bodyweight' },
+        { n: 'Childs pose', tag: 'p', sets: 2, reps: '45 sec', w: 'Bodyweight' },
+      ]},
+    ],
+  },
+  {
+    id: 'h6', label: 'D6', name: 'Full Lower — Peak Glute (Home)', rest: false, badge: 'key',
+    desc: 'Highest volume bodyweight day. Do not skip.',
+    sections: [
+      { title: 'Warm-up', exs: [{ n: 'Marching in place / high knees', tag: 'c', sets: 1, reps: '3 min', w: 'Bodyweight' }] },
+      { title: 'Main', exs: [
+        { n: 'Glute bridge', tag: 'g', sets: 5, reps: '25', w: 'Bodyweight', note: 'Heaviest rep volume of the week.' },
+        { n: 'Single-leg deadlift', tag: 'g', sets: 3, reps: '12 each leg', w: 'Bodyweight', note: 'Slow and controlled, balance focus.' },
+        { n: 'Curtsy lunge', tag: 'g', sets: 4, reps: '15 each leg', w: 'Bodyweight' },
+        { n: 'Donkey kicks', tag: 'g', sets: 3, reps: '20 each leg', w: 'Bodyweight', note: 'Match D1 volume.' },
+        { n: 'Fire hydrants', tag: 'g', sets: 3, reps: '20 each leg', w: 'Bodyweight' },
+      ]},
+    ],
+  },
+  { id: 'h7', label: 'D7', name: 'Rest', rest: true },
+]

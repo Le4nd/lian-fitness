@@ -1,9 +1,12 @@
-import { C, ROUTINE } from '../lib/constants'
+import { useState } from 'react'
+import { C, ROUTINE, HOME_ROUTINE } from '../lib/constants'
 import { s } from '../lib/styles'
 import { ExerciseCard } from './ExerciseCard'
 
 export function GymTab({ gymDay, setGymDay, todayGymSets, gymHistory, onSetChange, onSaveHistory, selectedDate }) {
-  const day = ROUTINE[gymDay]
+  const [location, setLocation] = useState('gym') // 'gym' | 'home'
+  const ROUTINE_SET = location === 'gym' ? ROUTINE : HOME_ROUTINE
+  const day = ROUTINE_SET[gymDay]
   const isToday = selectedDate === new Date().toISOString().split('T')[0]
 
   const bc = day.badge === 'key' ? { bg: C.redLight, c: C.red }
@@ -17,8 +20,24 @@ export function GymTab({ gymDay, setGymDay, todayGymSets, gymHistory, onSetChang
 
   return (
     <>
+      {/* Location switcher */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
+        <button onClick={() => { setLocation('gym'); setGymDay(0) }} style={{
+          flex: 1, padding: '9px 14px', borderRadius: 11, fontSize: 13, fontWeight: 700,
+          border: 'none', cursor: 'pointer', transition: 'all .15s',
+          background: location === 'gym' ? `linear-gradient(135deg,${C.blue},${C.pink})` : C.neutral,
+          color: location === 'gym' ? '#fff' : C.textMuted,
+        }}>🏋️ Gym</button>
+        <button onClick={() => { setLocation('home'); setGymDay(0) }} style={{
+          flex: 1, padding: '9px 14px', borderRadius: 11, fontSize: 13, fontWeight: 700,
+          border: 'none', cursor: 'pointer', transition: 'all .15s',
+          background: location === 'home' ? `linear-gradient(135deg,${C.blue},${C.pink})` : C.neutral,
+          color: location === 'home' ? '#fff' : C.textMuted,
+        }}>🏠 Home</button>
+      </div>
+
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 16 }}>
-        {ROUTINE.map((d, i) => (
+        {ROUTINE_SET.map((d, i) => (
           <button key={d.id} onClick={() => setGymDay(i)} style={{
             padding: '7px 13px', borderRadius: 9, fontSize: 12, fontWeight: 600,
             border: 'none', cursor: 'pointer', transition: 'all .15s',
@@ -81,7 +100,7 @@ export function GymTab({ gymDay, setGymDay, todayGymSets, gymHistory, onSetChang
           })()}
 
           <div style={{ fontSize: 12, color: C.textMuted, background: C.neutral, borderRadius: 9, padding: '9px 13px', marginTop: 8 }}>
-            Stop 2 reps before failure · 60–90s rest between sets
+            {location === 'home' ? 'Slow controlled reps · squeeze at peak contraction · 45-60s rest' : 'Stop 2 reps before failure · 60–90s rest between sets'}
           </div>
         </>
       )}
